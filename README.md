@@ -1,5 +1,5 @@
 # miniMEAP Installation
-Install Anaconda
+Install Anaconda (verified on v 4.10.3)
 
 Run Jupyter Notebook
 
