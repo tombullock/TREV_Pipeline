@@ -1,4 +1,4 @@
-# Minmeap Installation
+# miniMEAP Installation
 Install Anaconda
 
 Run Jupyter Notebook
