@@ -16,3 +16,6 @@ hold "m" and mouse click - estimate peak amplitude and intervals via preceding (
 
 left arrow - slow scroll left  
 right arrow - slow scroll right  
+
+# possibe programme to read AcqKnowledge files: 
+conda install -c auto bioread
