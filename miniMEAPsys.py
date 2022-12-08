@@ -15,66 +15,69 @@ def loadem():
         root.update()
         file_path = askopenfilename()
         root.destroy()
-        raw_df=bioread.read_file(file_path)
-        return raw_df
+        acq_dataset=bioread.read_file(file_path)
+        return acq_dataset,file_path
     
-    def select_chan(df,instr,prepop):
+    def select_chan(data,instr,prepop):
         window = tk.Tk()
         window.title(instr)
-        window.geometry('300x300')
+        window.geometry('300x600')
         
         var=[]
         c=[]
-        for ind in range(len(df.channel_headers)):
-            if ind==prepop:
+        for ind in range(len(data.channel_headers)):
+            if ind==prepop[0]:
                 var.append(tk.IntVar(value=1))
             else:
                 var.append(tk.IntVar())
-            c.append(tk.Checkbutton(window, text=df.channel_headers[ind].name,variable=var[ind], onvalue=1, offvalue=0))
+            c.append(tk.Checkbutton(window, text=data.channel_headers[ind].name,variable=var[ind], onvalue=1, offvalue=0))
             c[ind].pack()
+        
+        var_highp = tk.IntVar(value=prepop[1])
+        c_highp = tk.Checkbutton(window, text="perform highpass filter",variable=var_highp, onvalue=1, offvalue=0)
+        c_highp.pack(pady=10)
+        
+        var_deriv = tk.IntVar(value=prepop[2])
+        c_deriv = tk.Checkbutton(window, text="compute a derivative",variable=var_deriv, onvalue=1, offvalue=0)
+        c_deriv.pack(pady=10)
         
         exit_button = tk.Button(window, text="Continue...", command=window.destroy)
         exit_button.pack(pady=20)
         window.mainloop()
         chan=np.argwhere([v.get()==1 for v in var])
-        return chan[0][0]
+        highp=var_highp.get()==1
+        deriv=var_deriv.get()==1
+        return chan[0][0],deriv,highp
     
-    def get_ts(df,cont_ind,resp_ind):
-        hz=df.channels[cont_ind].samples_per_second
-        t=df.channels[cont_ind].time_index
-        s=df.channels[cont_ind].data
+    def get_cont_ts(acq_dataset,ind,deriv,highp):
+        hz=acq_dataset.channels[ind].samples_per_second
+        t=acq_dataset.channels[ind].time_index
+        s=acq_dataset.channels[ind].data
+            
+        if deriv==True:
+            s=np.diff(s)
+            t=t[1:]
         
-        #s=np.diff(s)
-        #t=t[1:]
+        out_dict={}
+        out_dict['s']=s
+        out_dict['t']=t
+        out_dict['hz']=hz
         
-        out_df={}
-        out_df['s_cont']=s
-        out_df['t_cont']=t
-        out_df['hz_cont']=hz
-        
-        
-        hz=df.channels[resp_ind].samples_per_second
-        t=df.channels[resp_ind].time_index
-        s=df.channels[resp_ind].data
-        out_df['s_resp']=s
-        out_df['t_resp']=t
-        out_df['hz_resp']=hz
-        
-        return out_df
+        return out_dict
     
-    raw_df=load_acq()
-    cont_ind=select_chan(raw_df,'Select Contractility Channel',9)
-    resp_ind=select_chan(raw_df,'Select Respiration Channel',1)
-    print('selected contractility channel is '+raw_df.channel_headers[cont_ind].name)
-    print('selected respiration channel is '+raw_df.channel_headers[resp_ind].name)
-    out_df=get_ts(raw_df,cont_ind,resp_ind)
+    acq_dataset,file_path=load_acq()
+    ind,deriv,highp=select_chan(acq_dataset,'Select Contractility Channel',[9,1,1])
+    print('selected contractility channel is '+acq_dataset.channel_headers[ind].name)
+    print('perform highpass: '+str(highp))
+    print('compute derivative: '+str(deriv))
+    cont_dict=get_cont_ts(acq_dataset,ind,deriv,highp)
     
-    return out_df
+    return cont_dict,file_path
     
-def set_thresh(df):
-    t=df['t_cont']
-    s=df['s_cont']
-    hz=df['hz_cont']
+def compute_peaks(cont_dict):
+    t=cont_dict['t']
+    s=cont_dict['s']
+    hz=cont_dict['hz']
     thresh_window = tk.Tk()
     thresh_window.withdraw()
     thresh_window.update()
@@ -117,3 +120,11 @@ def add_point(ix,iy,peak_times,peak_vals,peak_plot):
     peak_plot.set_xdata(peak_times)
     peak_plot.set_ydata(peak_vals)
     return peak_times,peak_vals,peak_plot
+
+# hz=df.channels[resp_ind].samples_per_second
+#         t=df.channels[resp_ind].time_index
+#         s=df.channels[resp_ind].data
+#         out_df['s_resp']=s
+#         out_df['t_resp']=t
+#         out_df['hz_resp']=hz
+#print('selected respiration channel is '+raw_df.channel_headers[resp_ind].name)
