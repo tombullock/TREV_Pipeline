@@ -3,15 +3,26 @@ import tkinter as tk
 from tkinter.filedialog import askopenfilename
 import pandas as pd
 from scipy.signal import find_peaks as findpeaks
-from scipy.signal import firwin, lfilter
+from scipy.signal import firwin, lfilter, filtfilt, butter
 import bioread
 import os
 import matplotlib.pyplot as plt
 
+def butter_highpass(cutoff, fs, order=5):
+    nyq = 0.5 * fs
+    normal_cutoff = cutoff / nyq
+    b, a = signal.butter(order, normal_cutoff, btype='high', analog=False)
+    return b, a
+
+def butter_highpass_filter(data, cutoff, fs, order=5):
+    b, a = butter_highpass(cutoff, fs, order=order)
+    y = signal.filtfilt(b, a, data)
+    return y
+
 def find_preceed_peak(signal,times,specific_time,preceed_window):
     idx = np.searchsorted(times, specific_time, side="left")
     local_max = np.argmax(signal[idx-np.round(preceed_window).astype(int):idx+1])
-    global_max = idx-np.round(preceed_window).astype(int)+local_max
+    global_max = (idx-np.round(preceed_window).astype(int)+local_max).astype(int)
     return global_max,np.max(signal[idx-np.round(preceed_window).astype(int):idx+1])
 
 def mm_lopass(data,times,srate,cutoff):
@@ -41,7 +52,7 @@ def loadem():
     def select_chan(data,instr,prepop):
         window = tk.Tk()
         window.title(instr)
-        window.geometry('300x600')
+        window.geometry('300x800')
         
         var=[]
         c=[]
@@ -54,47 +65,66 @@ def loadem():
             c[ind].pack()
         
         var_highp = tk.IntVar(value=prepop[1])
-        c_highp = tk.Checkbutton(window, text="perform highpass filter",variable=var_highp, onvalue=1, offvalue=0)
-        c_highp.pack(pady=10)
+        c_highp = tk.Checkbutton(window, text="estimate resp with low-pass filter",variable=var_highp, onvalue=1, offvalue=0)
+        c_highp.pack(pady=20)
         
-        var_deriv = tk.IntVar(value=prepop[2])
-        c_deriv = tk.Checkbutton(window, text="compute a derivative",variable=var_deriv, onvalue=1, offvalue=0)
-        c_deriv.pack(pady=20)
-        
+        rvar=[]
+        rc=[]
+        for ind in range(len(data.channel_headers)):
+            if ind==prepop[2]:
+                rvar.append(tk.IntVar(value=1))
+            else:
+                rvar.append(tk.IntVar())
+            rc.append(tk.Checkbutton(window, text=data.channel_headers[ind].name,variable=rvar[ind], onvalue=1, offvalue=0))
+            rc[ind].pack()
+               
         exit_button = tk.Button(window, text="Continue...", command=window.destroy)
         exit_button.pack(pady=20)
         window.mainloop()
-        chan=np.argwhere([v.get()==1 for v in var])
+        acc_chan=np.argwhere([v.get()==1 for v in var])
+        resp_chan=np.argwhere([v.get()==1 for v in rvar])
         highp=var_highp.get()==1
-        deriv=var_deriv.get()==1
-        return chan[0][0],deriv,highp
+        return acc_chan[0][0],resp_chan[0][0],highp
     
-    def get_cont_ts(acq_dataset,ind,deriv,highp):
-        hz=acq_dataset.channels[ind].samples_per_second
-        t=acq_dataset.channels[ind].time_index
-        s=acq_dataset.channels[ind].data
+    def get_cont_ts(acq_dataset,acc_chan,resp_chan,highp):
+        ##Contractility
+        hz=acq_dataset.channels[acc_chan].samples_per_second
+        t=acq_dataset.channels[acc_chan].time_index
+        s=acq_dataset.channels[acc_chan].data
+        print('removing slow movements from acceleration data with 7-order polynomial')
+        s_p = np.polyfit(t,s,7)
+        s = s-np.polyval(s_p,t)
+        print('applying lowpass filter to acceleration channel, 22.5 Hz cutoff')
+        t,s=mm_lopass(s,t,hz,22.5)
         
-        if deriv==True:
-            s=np.diff(s)
-            t=t[1:]
-            
-        if highp==True:
-            t,s=mm_lopass(s,t,hz,22.5)
-            print('applying lowpass filter, 22.5 Hz cutoff')
         
+        
+        resp_hz=acq_dataset.channels[resp_chan].samples_per_second
+        resp_t=acq_dataset.channels[resp_chan].time_index
+        resp_s=acq_dataset.channels[resp_chan].data
+        print('removing slow movements from respiration data with 7-order polynomial')
+        resp_s_p = np.polyfit(resp_t,resp_s,7)
+        resp_s = resp_s-np.polyval(resp_s_p,resp_t)
+        print('applying lowpass filter to respiration channel, 0.35 Hz cutoff')
+        resp_t,resp_s=mm_lopass(resp_s,resp_t,resp_hz,0.35)
+                        
         out_dict={}
         out_dict['s']=s
         out_dict['t']=t
         out_dict['hz']=hz
         
+        out_dict['resp_s']=resp_s
+        out_dict['resp_t']=resp_t
+        out_dict['resp_hz']=resp_hz
+        
         return out_dict
     
     acq_dataset,file_path=load_acq()
-    ind,deriv,highp=select_chan(acq_dataset,'Select Acceleration Channel to estimate time intervals',[3,1,0])
-    print('selected contractility channel is '+acq_dataset.channel_headers[ind].name)
-    print('perform highpass: '+str(highp))
-    print('compute derivative: '+str(deriv))
-    cont_dict=get_cont_ts(acq_dataset,ind,deriv,highp)
+    acc_chan,resp_chan, highp=select_chan(acq_dataset,'Select Acceleration and Respiration Channels',[3,1,1])
+    print('selected contractility channel is '+acq_dataset.channel_headers[acc_chan].name)
+    print('selected respiration channel is '+acq_dataset.channel_headers[resp_chan].name)
+    
+    cont_dict=get_cont_ts(acq_dataset,acc_chan,resp_chan,highp)
     
     return cont_dict,file_path
     
@@ -110,7 +140,7 @@ def compute_peaks(cont_dict):
     p_ind,p_dict = findpeaks(s,thresh,distance=.5*hz)
     peak_times=t[p_ind]
     peak_vals=p_dict['peak_heights']
-    return peak_times,peak_vals
+    return peak_times,peak_vals,p_ind
 
 def thresh_ind(hz):
     ind=np.arange(0,20*hz).astype(int)
@@ -145,16 +175,17 @@ def add_point(ix,iy,peak_times,peak_vals,peak_plot):
     peak_plot.set_ydata(peak_vals)
     return peak_times,peak_vals,peak_plot
 
-def shift_peaks(y,peak_times,peak_plot,cont_s,cont_t):
-    old_peak_times=peak_times.copy()
-    cont_vals=np.zeros(len(peak_times))
-    peak_times=np.zeros(len(old_peak_times))
-    for peak_ind,peak in enumerate(old_peak_times):
-        new_peak_idx,cont_vals[peak_ind]=find_preceed_peak(cont_s,cont_t,peak,y)
-        peak_times[peak_ind]=cont_t[new_peak_idx]
-    peak_plot.set_xdata(peak_times)
-    peak_plot.set_ydata(cont_vals)
-    return peak_times,cont_vals,peak_plot
+def shift_peaks(yzoom,peak_times,cont_t,cont_s,cont_inds,peak_plot):
+    if yzoom>=1:
+        new_cont_inds=np.zeros(len(peak_times)).astype(int)
+        for peak_ind,peak in enumerate(peak_times):
+            new_cont_inds[peak_ind],_=find_preceed_peak(cont_s,cont_t,peak,yzoom)
+    else:
+        new_cont_inds=peak_inds.copy()
+    peak_plot.set_xdata(cont_t[new_cont_inds])
+    peak_plot.set_ydata(cont_s[new_cont_inds])
+    ind_offset = cont_inds-new_cont_inds
+    return ind_offset
 
 #def find_cont_from_acc(acc_peak_times,acc_timeseries,cont_time
 #
