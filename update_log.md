@@ -22,3 +22,7 @@ update 2/9/22 6:48 - nmd
 
 - adding tutorial.md
 - deleting various old files
+
+update 2/10/22 -nmd
+- change to miniMEAPsys.py, can now work with a respiration belt, if specified
+- change to miniMEAPsys.py, user now specifies an output filename, prepopulated with default

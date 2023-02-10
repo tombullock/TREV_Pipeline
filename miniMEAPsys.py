@@ -9,6 +9,15 @@ import bioread
 import os
 import matplotlib.pyplot as plt
 
+def outsave_box(file_in):
+    out_window = tk.Tk()
+    out_window.withdraw()
+    out_window.update()
+    out_window.geometry('400x300+500+500')
+    out_f = tk.simpledialog.askstring("Save File", "Select output filename",parent=out_window,initialvalue=file_in)
+    out_window.destroy()
+    return out_f
+
 def regress_out(cont_dict):
     nb = len(cont_dict['cont_peak_times'])
     RR = cont_dict['RR']
@@ -132,8 +141,11 @@ def loadem():
         print('removing slow movements from respiration data with 7-order polynomial')
         resp_s_p = np.polyfit(resp_t,resp_s,10)
         resp_s = resp_s-np.polyval(resp_s_p,resp_t)
-        print('applying lowpass filter to respiration channel, 0.35 Hz cutoff')
-        resp_t,resp_s=mm_lopass(resp_s,resp_t,resp_hz,0.35)
+        if highp==1:
+            print('applying lowpass filter to respiration channel, 0.35 Hz cutoff')
+            resp_t,resp_s=mm_lopass(resp_s,resp_t,resp_hz,0.35)
+        else:
+            print('NOT applying lowpass to respiration channel')
                         
         out_dict={}
         out_dict['s']=s
