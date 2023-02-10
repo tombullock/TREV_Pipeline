@@ -4,9 +4,32 @@ from tkinter.filedialog import askopenfilename
 import pandas as pd
 from scipy.signal import find_peaks as findpeaks
 from scipy.signal import firwin, lfilter, filtfilt, butter
+from scipy.stats import zscore
 import bioread
 import os
 import matplotlib.pyplot as plt
+
+def regress_out(cont_dict):
+    nb = len(cont_dict['cont_peak_times'])
+    RR = cont_dict['RR']
+    resp_amount = 1000*np.ones(nb)
+    resp_cycle = 1000*np.ones(nb)
+    for beat_no,beat_time in enumerate(cont_dict['cont_peak_times']):    
+        idx = np.searchsorted(cont_dict['resp_t'], beat_time, side="left")
+        if idx!=len(cont_dict['resp_t']):
+            if np.abs(beat_time-cont_dict['resp_t'][idx])<.01:
+                resp_amount[beat_no]=cont_dict['resp_amount'][idx]
+                resp_cycle[beat_no]=cont_dict['resp_cycle'][idx]
+
+    resp_amount[resp_amount==1000]=np.median(resp_amount)
+    resp_cycle[resp_cycle==1000]=np.median(resp_cycle)
+    RR[np.isnan(RR)]=np.nanmedian(RR)
+    X=np.array([np.ones(nb),zscore(RR),zscore(resp_amount),zscore(resp_cycle)]).T
+    y = cont_dict['raw_contractility_peaks']
+    B = np.matmul(np.linalg.inv(np.matmul(X.T,X)),np.matmul(X.T,y))
+    resid = y - np.matmul(X,B)
+    cont_dict['resid_contractility'] = B[0]+resid
+    return cont_dict
 
 def butter_highpass(cutoff, fs, order=5):
     nyq = 0.5 * fs
@@ -37,6 +60,12 @@ def mm_lopass(data,times,srate,cutoff):
     x=x[N-1:]
     t=times[N-1:]-d   
     return t,x
+
+def norm_range(data,new_min,new_max):
+    new_range = new_max-new_min
+    Z = (data-np.min(data))/(np.max(data)-np.min(data))
+    norm_data = new_min + Z*new_range
+    return norm_data
 
 def loadem():
     
@@ -92,18 +121,16 @@ def loadem():
         t=acq_dataset.channels[acc_chan].time_index
         s=acq_dataset.channels[acc_chan].data
         print('removing slow movements from acceleration data with 7-order polynomial')
-        s_p = np.polyfit(t,s,7)
+        s_p = np.polyfit(t,s,10)
         s = s-np.polyval(s_p,t)
         print('applying lowpass filter to acceleration channel, 22.5 Hz cutoff')
-        t,s=mm_lopass(s,t,hz,22.5)
-        
-        
+        t,s=mm_lopass(s,t,hz,22.5)       
         
         resp_hz=acq_dataset.channels[resp_chan].samples_per_second
         resp_t=acq_dataset.channels[resp_chan].time_index
         resp_s=acq_dataset.channels[resp_chan].data
         print('removing slow movements from respiration data with 7-order polynomial')
-        resp_s_p = np.polyfit(resp_t,resp_s,7)
+        resp_s_p = np.polyfit(resp_t,resp_s,10)
         resp_s = resp_s-np.polyval(resp_s_p,resp_t)
         print('applying lowpass filter to respiration channel, 0.35 Hz cutoff')
         resp_t,resp_s=mm_lopass(resp_s,resp_t,resp_hz,0.35)
@@ -113,18 +140,61 @@ def loadem():
         out_dict['t']=t
         out_dict['hz']=hz
         
-        out_dict['resp_s']=resp_s
-        out_dict['resp_t']=resp_t
-        out_dict['resp_hz']=resp_hz
+        out_dict['raw_resp_s']=resp_s
+        out_dict['raw_resp_t']=resp_t
+        out_dict['raw_resp_hz']=resp_hz
         
         return out_dict
     
+    def resp_cycle_amount(cont_dict, min_dist):
+        peak_inds,_ = findpeaks(cont_dict['raw_resp_s'],distance=min_dist)
+        k=1
+        peak_no=-1
+        resp_t=[]
+        resp_cycle=[]
+        resp_amount=[]
+        while k>0:
+            peak_no=peak_no+1
+            if peak_no+2<len(peak_inds):
+                next3=cont_dict['raw_resp_s'][peak_inds[np.arange(peak_no,peak_no+3)]]
+
+                if (next3[0]<next3[1]) & (next3[2]<next3[1]):
+                    wave_t = cont_dict['raw_resp_t'][peak_inds[peak_no]:peak_inds[peak_no+2]]
+                    resp_t.append(wave_t)
+                
+                    up_wave = cont_dict['raw_resp_t'][peak_inds[peak_no]:peak_inds[peak_no+1]]
+                    up_phase = -np.sin(norm_range(up_wave,0,np.pi))
+                
+                    dn_wave = cont_dict['raw_resp_t'][peak_inds[peak_no+1]:peak_inds[peak_no+2]]
+                    dn_phase = -np.sin(norm_range(dn_wave,np.pi,2*np.pi))
+                
+                    phase = np.concatenate((up_phase,dn_phase))
+                    resp_cycle.append(phase)
+                
+                    wave_vals = cont_dict['raw_resp_s'][peak_inds[peak_no]:peak_inds[peak_no+2]]
+                    resp_amount.append(wave_vals-np.mean(wave_vals))
+                
+                    peak_no=peak_no+1
+            else:
+                k=0
+    
+        cont_dict['resp_t']=np.hstack(resp_t)
+        cont_dict['resp_amount']=np.hstack(resp_amount)
+        cont_dict['resp_cycle']=np.hstack(resp_cycle)
+        cont_dict['resp_peak_inds']=peak_inds
+    
+        return cont_dict
+      
     acq_dataset,file_path=load_acq()
     acc_chan,resp_chan, highp=select_chan(acq_dataset,'Select Acceleration and Respiration Channels',[3,1,1])
     print('selected contractility channel is '+acq_dataset.channel_headers[acc_chan].name)
     print('selected respiration channel is '+acq_dataset.channel_headers[resp_chan].name)
     
+    print('extracting raw signals from AcqKnowledge files...')
     cont_dict=get_cont_ts(acq_dataset,acc_chan,resp_chan,highp)
+    
+    print('estimating respiration amount and cycle...')
+    cont_dict=resp_cycle_amount(cont_dict,cont_dict['raw_resp_hz']*.75)
     
     return cont_dict,file_path
     
@@ -186,6 +256,26 @@ def shift_peaks(yzoom,peak_times,cont_t,cont_s,cont_inds,peak_plot):
     peak_plot.set_ydata(cont_s[new_cont_inds])
     ind_offset = cont_inds-new_cont_inds
     return ind_offset
+
+def shift_peaks(yzoom,peak_times,cont_t,cont_s,cont_inds,peak_plot):
+    if yzoom>=1:
+        new_cont_inds=np.zeros(len(peak_times)).astype(int)
+        for peak_ind,peak in enumerate(peak_times):
+            new_cont_inds[peak_ind],_=find_preceed_peak(cont_s,cont_t,peak,yzoom)
+    else:
+        new_cont_inds=peak_inds.copy()
+    if peak_plot!=None:
+        peak_plot.set_xdata(cont_t[new_cont_inds])
+        peak_plot.set_ydata(cont_s[new_cont_inds])
+    ind_offset = cont_inds-new_cont_inds
+    return ind_offset
+
+def shift_peaks_no_plot(yzoom,peak_times,cont_t,cont_s,cont_inds):
+    new_cont_inds=np.zeros(len(peak_times)).astype(int)
+    for peak_ind,peak in enumerate(peak_times):
+        new_cont_inds[peak_ind],_=find_preceed_peak(cont_s,cont_t,peak,yzoom)
+
+    return new_cont_inds
 
 #def find_cont_from_acc(acc_peak_times,acc_timeseries,cont_time
 #

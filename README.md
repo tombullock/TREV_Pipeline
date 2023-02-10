@@ -7,6 +7,8 @@ Make sure miniMEAP.ipynb and miniMEAPsys.py are in the same directory
 
 Open miniMEAP.ipynb
 
+For a tutorial with an example dataset see "tutorial.md"
+
 
 # miniMEAP GUI interaction
 
