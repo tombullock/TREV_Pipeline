@@ -26,3 +26,18 @@ update 2/9/22 6:48 - nmd
 update 2/10/22 -nmd
 - change to miniMEAPsys.py, can now work with a respiration belt, if specified
 - change to miniMEAPsys.py, user now specifies an output filename, prepopulated with default
+
+update 2/13/22 - nmd
+- adding new function for cell 4, adjust_peak_amp, that only changes peak amplitude
+- adding new function for cell 4, meap_dat_cell4, that only changes peak amplitude
+- Cell 3: plot now updates number of peaks as they are added and removed
+- loadem now does a plt.closeall and a 
+- bug fix - find_preceed_peak - now searches either in the preceeding 250 datapoints for cont peak, or if peak ind <250, the entire series up to that point
+- bug fix - meap_dat - now boolean test to make sure there are two peaks either side of meap_dat loc
+- bug fix - duplicate shift_peaks removed
+
+- desired future fixes: 
+some kind of tkinter "kill all / close all" that can be called in Cell 1, might help with loading issues
+some way of making functions of the text in Cells 3 and 4, which make the notebook very long
+Cell 1 very buggy, need to restart kernel a lot... 
+

@@ -11,9 +11,9 @@ import matplotlib.pyplot as plt
 
 def outsave_box(file_in):
     out_window = tk.Tk()
+    out_window.geometry('400x300+500+500')
     out_window.withdraw()
     out_window.update()
-    out_window.geometry('400x300+500+500')
     out_f = tk.simpledialog.askstring("Save File", "Select output filename",parent=out_window,initialvalue=file_in)
     out_window.destroy()
     return out_f
@@ -53,9 +53,15 @@ def butter_highpass_filter(data, cutoff, fs, order=5):
 
 def find_preceed_peak(signal,times,specific_time,preceed_window):
     idx = np.searchsorted(times, specific_time, side="left")
-    local_max = np.argmax(signal[idx-np.round(preceed_window).astype(int):idx+1])
-    global_max = (idx-np.round(preceed_window).astype(int)+local_max).astype(int)
-    return global_max,np.max(signal[idx-np.round(preceed_window).astype(int):idx+1])
+    if idx>preceed_window:
+        local_max = np.argmax(signal[idx-np.round(preceed_window).astype(int):idx+1])
+        global_max = (idx-np.round(preceed_window).astype(int)+local_max).astype(int)
+        amp = np.max(signal[idx-np.round(preceed_window).astype(int):idx+1])
+    else:
+        local_max = np.argmax(signal[0:idx+1])
+        global_max = local_max
+        amp = np.max(signal[0:idx+1])
+    return global_max,amp
 
 def mm_lopass(data,times,srate,cutoff):
     tb = np.minimum(np.maximum(0.25 * cutoff, 2.),srate / 2. - cutoff)
@@ -196,7 +202,7 @@ def loadem():
         cont_dict['resp_peak_inds']=peak_inds
     
         return cont_dict
-      
+    plt.close('all')  
     acq_dataset,file_path=load_acq()
     acc_chan,resp_chan, highp=select_chan(acq_dataset,'Select Acceleration and Respiration Channels',[3,1,1])
     print('selected contractility channel is '+acq_dataset.channel_headers[acc_chan].name)
@@ -230,15 +236,26 @@ def thresh_ind(hz):
 
 def meap_dat(ix,iy,peak_times,peak_vals,peak_plot):
     ind_after=np.argmax(peak_times>ix)
-    mu_inds = np.arange(ind_after-2,ind_after+2)
-    new_time0 = peak_times[mu_inds[1]]+np.diff(peak_times[mu_inds[0:2]])
-    new_time1 = peak_times[ind_after]-np.diff(peak_times[mu_inds[2:]])
-    new_time = np.mean([new_time0,new_time1])
-    new_val = np.mean(peak_vals[mu_inds])
-    peak_times = np.insert(peak_times, ind_after-1, new_time)
-    peak_vals = np.insert(peak_vals, ind_after-1, new_val)
-    peak_plot.set_xdata(peak_times)
-    peak_plot.set_ydata(peak_vals)
+    if (ind_after-2>-1) | (ind_after+2<=len(peak_times)):
+        mu_inds = np.arange(ind_after-2,ind_after+2)
+        new_time0 = peak_times[mu_inds[1]]+np.diff(peak_times[mu_inds[0:2]])
+        new_time1 = peak_times[ind_after]-np.diff(peak_times[mu_inds[2:]])
+        new_time = np.mean([new_time0,new_time1])
+        new_val = np.mean(peak_vals[mu_inds])
+        peak_times = np.insert(peak_times, ind_after-1, new_time)
+        peak_vals = np.insert(peak_vals, ind_after-1, new_val)
+        peak_plot.set_xdata(peak_times)
+        peak_plot.set_ydata(peak_vals)
+    return peak_times,peak_vals,peak_plot
+
+def meap_dat_cell4(ix,iy,peak_times,peak_vals,peak_plot):
+    idx = np.argmin(np.abs(ix-peak_times))
+    if (idx-2>-1) | (idx+2<=len(peak_times)):
+        mu_inds = np.arange(idx-2,idx+2)
+        new_val = np.mean(peak_vals[mu_inds])
+        peak_vals[idx] = new_val
+        peak_plot.set_xdata(peak_times)
+        peak_plot.set_ydata(peak_vals)
     return peak_times,peak_vals,peak_plot
 
 def remove_point(ix,peak_times,peak_vals,peak_plot):
@@ -257,6 +274,13 @@ def add_point(ix,iy,peak_times,peak_vals,peak_plot):
     peak_plot.set_ydata(peak_vals)
     return peak_times,peak_vals,peak_plot
 
+def adjust_peak_amp(ix,iy,peak_times,peak_vals,peak_plot):
+    idx = np.argmin(np.abs(ix-peak_times))
+    peak_vals[idx] = iy
+    peak_plot.set_xdata(peak_times)
+    peak_plot.set_ydata(peak_vals)
+    return peak_times,peak_vals,peak_plot
+
 def shift_peaks(yzoom,peak_times,cont_t,cont_s,cont_inds,peak_plot):
     if yzoom>=1:
         new_cont_inds=np.zeros(len(peak_times)).astype(int)
@@ -266,19 +290,6 @@ def shift_peaks(yzoom,peak_times,cont_t,cont_s,cont_inds,peak_plot):
         new_cont_inds=peak_inds.copy()
     peak_plot.set_xdata(cont_t[new_cont_inds])
     peak_plot.set_ydata(cont_s[new_cont_inds])
-    ind_offset = cont_inds-new_cont_inds
-    return ind_offset
-
-def shift_peaks(yzoom,peak_times,cont_t,cont_s,cont_inds,peak_plot):
-    if yzoom>=1:
-        new_cont_inds=np.zeros(len(peak_times)).astype(int)
-        for peak_ind,peak in enumerate(peak_times):
-            new_cont_inds[peak_ind],_=find_preceed_peak(cont_s,cont_t,peak,yzoom)
-    else:
-        new_cont_inds=peak_inds.copy()
-    if peak_plot!=None:
-        peak_plot.set_xdata(cont_t[new_cont_inds])
-        peak_plot.set_ydata(cont_s[new_cont_inds])
     ind_offset = cont_inds-new_cont_inds
     return ind_offset
 
