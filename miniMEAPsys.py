@@ -8,6 +8,7 @@ from scipy.stats import zscore
 import bioread
 import os
 import matplotlib.pyplot as plt
+import sys
 
 def outsave_box(file_in):
     out_window = tk.Tk()
@@ -94,9 +95,14 @@ def loadem():
         return acq_dataset,file_path
     
     def select_chan(data,instr,prepop):
+        
+        # set all window geometry (just leave empty to default to text size)
+        all_window_geom = '500x700'
+        
+        # ACCELERATION CHANNEL
         window = tk.Tk()
-        window.title(instr)
-        window.geometry('300x800')
+        window.title('Select Acceleration Channel then click X')
+        window.geometry(all_window_geom)
         
         var=[]
         c=[]
@@ -107,9 +113,16 @@ def loadem():
                 var.append(tk.IntVar())
             c.append(tk.Checkbutton(window, text=data.channel_headers[ind].name,variable=var[ind], onvalue=1, offvalue=0))
             c[ind].pack()
+            
+        window.mainloop()
+        
+        # RESPIRATION CHANNEL
+        window2 = tk.Tk()
+        window2.title('Select Respiration Channel then click X')
+        window2.geometry(all_window_geom)
         
         var_highp = tk.IntVar(value=prepop[1])
-        c_highp = tk.Checkbutton(window, text="estimate resp with low-pass filter",variable=var_highp, onvalue=1, offvalue=0)
+        c_highp = tk.Checkbutton(window2, text="estimate resp with low-pass filter",variable=var_highp, onvalue=1, offvalue=0)
         c_highp.pack(pady=20)
         
         rvar=[]
@@ -119,18 +132,67 @@ def loadem():
                 rvar.append(tk.IntVar(value=1))
             else:
                 rvar.append(tk.IntVar())
-            rc.append(tk.Checkbutton(window, text=data.channel_headers[ind].name,variable=rvar[ind], onvalue=1, offvalue=0))
+            rc.append(tk.Checkbutton(window2, text=data.channel_headers[ind].name,variable=rvar[ind], onvalue=1, offvalue=0))
             rc[ind].pack()
-               
-        exit_button = tk.Button(window, text="Continue...", command=window.destroy)
-        exit_button.pack(pady=20)
-        window.mainloop()
+            
+        window2.mainloop()
+        
+        
+        ## DO YOU HAVE AN EVENT CHANNEL?
+        window3 = tk.Tk()
+        window3.title('Do you have an event channel?')
+        window3.geometry(all_window_geom)#'300x800')
+        
+        var_event_on_off = tk.IntVar(value=1)
+        c_event_on_off = tk.Checkbutton(window3, text="Event Channel present?",variable=var_event_on_off, onvalue=1, offvalue=0)
+        c_event_on_off.pack(pady=20)
+        
+        window3.mainloop()
+        
+        #print(var_event_on_off.get())
+
+
+        # IF EVENT CHANNEL...        
+        event_on_off = var_event_on_off.get()
+
+        if event_on_off==1:
+            window4 = tk.Tk()
+            window4.title('Select Event/Trigger Channel then click X')
+            window4.geometry(all_window_geom)#'300x800')
+           
+            # TRIGGER/EVENT CHANNEL
+            event_chan_present='yes'
+            evar=[]
+            ec=[]
+            for ind in range(len(data.channel_headers)):
+                if ind==prepop[3]:
+                    evar.append(tk.IntVar(value=1))
+                else:
+                    evar.append(tk.IntVar())
+                ec.append(tk.Checkbutton(window4, text=data.channel_headers[ind].name,variable=evar[ind], onvalue=1, offvalue=0))
+                ec[ind].pack()
+ 
+            window4.mainloop()
+        
+        else:
+            event_chan_present = 'no'
+            evar = [] # just empty evar if no event channel
+        
+        
         acc_chan=np.argwhere([v.get()==1 for v in var])
         resp_chan=np.argwhere([v.get()==1 for v in rvar])
         highp=var_highp.get()==1
-        return acc_chan[0][0],resp_chan[0][0],highp
+        
+        if event_chan_present=='yes':        
+            event_chan=np.argwhere([v.get()==1 for v in evar])
+            event_chan = event_chan[0][0]
+        elif event_chan_present=='no':
+            event_chan = 99 # arb
+
+
+        return acc_chan[0][0],resp_chan[0][0],highp,event_chan 
     
-    def get_cont_ts(acq_dataset,acc_chan,resp_chan,highp):
+    def get_cont_ts(acq_dataset,acc_chan,resp_chan,highp,event_chan):
         ##Contractility
         hz=acq_dataset.channels[acc_chan].samples_per_second
         t=acq_dataset.channels[acc_chan].time_index
@@ -152,8 +214,11 @@ def loadem():
             resp_t,resp_s=mm_lopass(resp_s,resp_t,resp_hz,0.35)
         else:
             print('NOT applying lowpass to respiration channel')
-                        
+            
+
+
         out_dict={}
+
         out_dict['s']=s
         out_dict['t']=t
         out_dict['hz']=hz
@@ -162,7 +227,20 @@ def loadem():
         out_dict['raw_resp_t']=resp_t
         out_dict['raw_resp_hz']=resp_hz
         
+        # Events (TOM)
+        if event_chan!=99:
+            event_codes=acq_dataset.channels[event_chan].data
+            event_times=acq_dataset.channels[event_chan].time_index
+            event_hz = acq_dataset.channels[event_chan].samples_per_second
+        
+            out_dict['events_s']=event_codes
+            out_dict['events_t']=event_times
+            out_dict['events_hz']=event_hz
+        
         return out_dict
+    
+    
+    
     
     def resp_cycle_amount(cont_dict, min_dist):
         peak_inds,_ = findpeaks(cont_dict['raw_resp_s'],distance=min_dist)
@@ -202,14 +280,19 @@ def loadem():
         cont_dict['resp_peak_inds']=peak_inds
     
         return cont_dict
+    
+    
     plt.close('all')  
     acq_dataset,file_path=load_acq()
-    acc_chan,resp_chan, highp=select_chan(acq_dataset,'Select Acceleration and Respiration Channels',[3,1,1])
+    acc_chan,resp_chan, highp, event_chan=select_chan(acq_dataset,'Select Acceleration and Respiration Channels Then Click "X" To Close Window',[3,1,1,14])
     print('selected contractility channel is '+acq_dataset.channel_headers[acc_chan].name)
     print('selected respiration channel is '+acq_dataset.channel_headers[resp_chan].name)
     
+    if event_chan!=99:
+        print('selected event channel is '+acq_dataset.channel_headers[event_chan].name)
+    
     print('extracting raw signals from AcqKnowledge files...')
-    cont_dict=get_cont_ts(acq_dataset,acc_chan,resp_chan,highp)
+    cont_dict=get_cont_ts(acq_dataset,acc_chan,resp_chan,highp,event_chan)
     
     print('estimating respiration amount and cycle...')
     cont_dict=resp_cycle_amount(cont_dict,cont_dict['raw_resp_hz']*.75)
