@@ -37,7 +37,12 @@ update 2/13/22 - nmd
 - bug fix - duplicate shift_peaks removed
 
 - desired future fixes: 
-some kind of tkinter "kill all / close all" that can be called in Cell 1, might help with loading issues
+some kind of tkinter "kill all / close all" that can be called in Cell 1, might help with loading issues - Fixed (hopefully) - see below (tb)
 some way of making functions of the text in Cells 3 and 4, which make the notebook very long
 Cell 1 very buggy, need to restart kernel a lot... 
+
+update 2/15/23 - tb
+- CELL1: implemented workaround for tkinter issue with closing windows on mac (just select checkbox then hit "x" to close window - works on mac but needs testing on win/linux)
+- CELL1: now click through a series of checkbox windows to select acceleration channel then resp channel THEN option to select if event channel present and if so, then select the channel
+- CELL5: if an event channel is present, export events to csv file with the same name as the out_file but with '_events' added end of filename.
 
