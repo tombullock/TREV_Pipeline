@@ -46,3 +46,5 @@ update 2/15/23 - tb
 - CELL1: now click through a series of checkbox windows to select acceleration channel then resp channel THEN option to select if event channel present and if so, then select the channel
 - CELL5: if an event channel is present, export events to csv file with the same name as the out_file but with '_events' added end of filename.
 
+update 2/16/23 - tb
+- created a new "custom" version of the notebook file for use with RADARS data.  Event codes are now visualized as part of CELL 3 (green vertical line = block start, red vertical line = block end).  This allows you to identify and ignore between block noisy periods.   Note this is very specific to RADARS experiment struct.
