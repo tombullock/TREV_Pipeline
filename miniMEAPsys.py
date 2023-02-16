@@ -284,7 +284,7 @@ def loadem():
     
     plt.close('all')  
     acq_dataset,file_path=load_acq()
-    acc_chan,resp_chan, highp, event_chan=select_chan(acq_dataset,'Select Acceleration and Respiration Channels Then Click "X" To Close Window',[3,1,1,14])
+    acc_chan,resp_chan, highp, event_chan=select_chan(acq_dataset,'Select Acceleration and Respiration Channels Then Click "X" To Close Window',[1,1,2,14])
     print('selected contractility channel is '+acq_dataset.channel_headers[acc_chan].name)
     print('selected respiration channel is '+acq_dataset.channel_headers[resp_chan].name)
     
