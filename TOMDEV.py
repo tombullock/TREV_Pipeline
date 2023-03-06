@@ -20,6 +20,12 @@ import matplotlib.pyplot as plt
 ## 3,1,1,14
 
 
+# # just read in acq data for dev purposes
+# file_path = os.path.join('/Users/tombullock/Documents/Psychology/TREV_DEV/Data','sj10_RADARS.acq')
+# acq_dataset=bioread.read_file(file_path)
+
+
+
 # CELL 1
 from miniMEAPsys import loadem
 cont_dict,file_path=loadem()
@@ -233,4 +239,25 @@ if 'events_s' in cont_dict: # dict will only contain "events_s" key if event cha
     
     # create df with event codes and timestamps and write to csv
     pd.DataFrame({'time':time_mat,'code':code_mat}).to_csv(out_f_event)
+    
+# TOM ADDED OUTPUT BP TO SEPARATE FILE
+if 'bp_s' in cont_dict: # if there's bp data present
+    out_f_bp = out_f[:-4] + '_bp.csv'
+    
+    # grab bp times and values and downsample from 1000 Hz to 10 Hz
+    times=np.round(cont_dict['bp_t'][0:-1:100],1)
+    bp = np.round(cont_dict['bp_s'][0:-1:100],1)
+    #resp = cont_dict['raw_resp_s']
 
+    pd.DataFrame({'time':times,'bp':bp}).to_csv(out_f_bp)
+
+# TOM ADDED OUTPUT RESP TO SEPARATE FILE
+if 'raw_resp_s' in cont_dict: # if there's bp data present
+    out_f_resp = out_f[:-4] + '_resp.csv'
+    
+    # grab resp times and values and downsample from 1000 Hz to 10 Hz
+    times=np.round(cont_dict['raw_resp_t'][0:-1:100],1)
+    resp = np.round(cont_dict['raw_resp_s'][0:-1:100],1)
+    #resp = cont_dict['raw_resp_s']
+
+    pd.DataFrame({'time':times,'resp':resp}).to_csv(out_f_resp)

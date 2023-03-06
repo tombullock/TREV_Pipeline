@@ -215,9 +215,24 @@ def loadem():
         else:
             print('NOT applying lowpass to respiration channel')
             
-
-
+        # create out_dict
         out_dict={}
+    
+        # Extract Continuous BP and Raw Resp (Tom Added)
+        bp_chan = 3 # NEED TO ADAPT LOAD SCREENS TO GIVE THIS AS AN OPTION
+        try:
+            if bp_chan:
+                bp_hz=acq_dataset.channels[bp_chan].samples_per_second
+                bp_t=acq_dataset.channels[bp_chan].time_index
+                bp_s=acq_dataset.channels[bp_chan].data
+                
+                out_dict['bp_s']=bp_s
+                out_dict['bp_t']=bp_t
+                out_dict['bp_hz']=bp_hz
+                
+        except NameError:
+            print('No BP Channel')
+
 
         out_dict['s']=s
         out_dict['t']=t
@@ -226,6 +241,8 @@ def loadem():
         out_dict['raw_resp_s']=resp_s
         out_dict['raw_resp_t']=resp_t
         out_dict['raw_resp_hz']=resp_hz
+        
+
         
         # Events (TOM)
         if event_chan!=99:
@@ -284,7 +301,7 @@ def loadem():
     
     plt.close('all')  
     acq_dataset,file_path=load_acq()
-    acc_chan,resp_chan, highp, event_chan=select_chan(acq_dataset,'Select Acceleration and Respiration Channels Then Click "X" To Close Window',[1,1,2,14])
+    acc_chan,resp_chan, highp, event_chan=select_chan(acq_dataset,'Select Acceleration and Respiration Channels Then Click "X" To Close Window',[15,1,2,14])
     print('selected contractility channel is '+acq_dataset.channel_headers[acc_chan].name)
     print('selected respiration channel is '+acq_dataset.channel_headers[resp_chan].name)
     
