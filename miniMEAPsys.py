@@ -92,6 +92,31 @@ def loadem():
         file_path = askopenfilename()
         root.destroy()
         acq_dataset=bioread.read_file(file_path)
+        
+        
+        # ### TOM insert this code into miniMEAPsys temporarily to fix triggers for sjs01-04 ###
+        # from scipy.io import loadmat
+
+        # # load fixed trigger file
+        # file_path_fixed_events_dataset = file_path[:-4] + '_Fixed_Triggers.mat'
+        # mat_contents = loadmat(file_path_fixed_events_dataset)
+
+        # # extract new triggers array
+        # new_events_array = mat_contents['data'][:,4]
+
+        # # check shape for existing data channel and new replacement array
+        # np.shape(acq_dataset.channels[4].data) == np.shape(new_events_array)
+
+        # # replace existing data channel with new one 
+        # for i in np.arange(1,np.shape(acq_dataset.channels[4].data)[0]):   
+        #     acq_dataset.channels[4].data[i] = new_events_array[i]
+        
+        # print('TRIGGERS REPLACED!!!')
+
+        # ### END TOM FIX TRIGGER CODE ###
+
+
+        
         return acq_dataset,file_path
     
     def select_chan(data,instr,prepop):
